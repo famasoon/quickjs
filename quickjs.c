@@ -36636,8 +36636,58 @@ static JSValue JS_ReadFunctionTag(BCReaderState *s)
     return JS_EXCEPTION;
 }
 
-static JSValue JS_ReadModule(BCReaderState *s)
-{
+ #ifndef REPRL_DWFD
+ #define REPRL_DWFD 103
+ #endif
+ static JSValue js_fuzzilli(JSContext *ctx, JSValueConst this_val, int argc,
+                            JSValueConst *argv)
+ {
+     const char *str;
+     if (argc < 1)
+         return JS_FALSE;
+ 
+     str = JS_ToCString(ctx, argv[0]);
+     if (!str)
+         return JS_FALSE;
+ 
+     if (!strcmp(str, "FUZZILLI_CRASH") && argc > 1) {
+         int type;
+         if (JS_ToInt32(ctx, &type, argv[1])) {
+             JS_FreeCString(ctx, str);
+             return JS_FALSE;
+         }
+         switch (type) {
+         case 0:
+             *((volatile int *)0x41414141) = 0x1337;
+             break;
+        case 1:
+            abort();
+            break;
+         default:
+            abort();
+             break;
+         }
+     } else if (!strcmp(str, "FUZZILLI_PRINT") && argc > 1) {
+         static FILE *fzliout = NULL;
+         if (!fzliout)
+             fzliout = fdopen(REPRL_DWFD, "w");
+         if (!fzliout) {
+             fprintf(stderr, "Fuzzer output channel not available, printing to stdout instead\n");
+             fzliout = stdout;
+         }
+         const char *print_str = JS_ToCString(ctx, argv[1]);
+         if (print_str) {
+             fprintf(fzliout, "%s\n", print_str);
+             JS_FreeCString(ctx, print_str);
+         }
+         fflush(fzliout);
+     }
+     JS_FreeCString(ctx, str);
+     return JS_TRUE;
+ }
+ 
+ static JSValue JS_ReadModule(BCReaderState *s)
+ {
     JSContext *ctx = s->ctx;
     JSValue obj;
     JSModuleDef *m = NULL;
@@ -52133,6 +52183,7 @@ static JSValue js_global_unescape(JSContext *ctx, JSValueConst this_val,
 
 static const JSCFunctionListEntry js_global_funcs[] = {
     JS_CFUNC_DEF("parseInt", 2, js_parseInt ),
+    JS_CFUNC_DEF("fuzzilli", 2, js_fuzzilli ),
     JS_CFUNC_DEF("parseFloat", 1, js_parseFloat ),
     JS_CFUNC_DEF("isNaN", 1, js_global_isNaN ),
     JS_CFUNC_DEF("isFinite", 1, js_global_isFinite ),

@@ -27,6 +27,16 @@
 BUILD_DIR=build
 BUILD_TYPE?=Release
 INSTALL_PREFIX?=/usr/local
+FUZZILLI_EXTRA_CFLAGS?=-fsanitize-coverage=trace-pc-guard
+FUZZILLI_EXTRA_LDFLAGS?=-fsanitize-coverage=trace-pc-guard
+CMAKE_EXTRA_ARGS?=
+FUZZILLI_CLANG?=$(shell command -v clang 2>/dev/null)
+ifdef FUZZILLI_CLANG
+CMAKE_CLANG_ARG=-DCMAKE_C_COMPILER=$(FUZZILLI_CLANG)
+else
+$(warning Clang compiler not found; sanitizer coverage flags may be unsupported)
+CMAKE_CLANG_ARG=
+endif
 
 QJS=$(BUILD_DIR)/qjs
 QJSC=$(BUILD_DIR)/qjsc
@@ -45,6 +55,10 @@ endif
 
 all: $(QJS)
 
+.PHONY: qjs qjsc
+qjs: $(QJS)
+qjsc: $(QJSC)
+
 amalgam: TEMP := $(shell mktemp -d)
 amalgam: $(QJS)
 	$(QJS) amalgam.js $(TEMP)/quickjs-amalgam.c
@@ -59,7 +73,13 @@ fuzz:
 	./fuzz
 
 $(BUILD_DIR):
-	cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) -DCMAKE_INSTALL_PREFIX=$(INSTALL_PREFIX)
+	cmake -B $(BUILD_DIR) \
+		-DCMAKE_BUILD_TYPE=$(BUILD_TYPE) \
+		-DCMAKE_INSTALL_PREFIX=$(INSTALL_PREFIX) \
+		$(CMAKE_CLANG_ARG) \
+		-DFUZZILLI_EXTRA_CFLAGS="$(FUZZILLI_EXTRA_CFLAGS)" \
+		-DFUZZILLI_EXTRA_LDFLAGS="$(FUZZILLI_EXTRA_LDFLAGS)" \
+		$(CMAKE_EXTRA_ARGS)
 
 $(QJS): $(BUILD_DIR)
 	cmake --build $(BUILD_DIR) -j $(JOBS)
@@ -144,4 +164,4 @@ unicode_gen: $(BUILD_DIR)
 libunicode-table.h: unicode_gen
 	$(BUILD_DIR)/unicode_gen unicode $@
 
-.PHONY: all amalgam ctest cxxtest debug fuzz jscheck install clean codegen distclean stats test test262 test262-update test262-check microbench unicode_gen $(QJS) $(QJSC)
+.PHONY: all amalgam ctest cxxtest debug fuzz jscheck install clean codegen distclean stats test test262 test262-update test262-check microbench unicode_gen qjs qjsc $(QJS) $(QJSC)
